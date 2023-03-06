@@ -3,19 +3,25 @@ template <typename T>
 class smart_ptr {
  public:
   explicit smart_ptr(T *ptr = nullptr) : ptr_(ptr) {}
-  // smart_ptr ptr1{create_shape(shape_type::circle)};
-  // smart_ptr ptr2{std::move(ptr1)};
-  // 使用移动构造函数的时候，新对象ptr2直接将ptr1的指针所有权拿走
-  smart_ptr(const smart_ptr &&other) noexcept : ptr_(other.release()) {}
 
-  // smart_ptr ptr1{create_shape(shape_type::circle)};
-  // 参数变成了对象而非引用，那么创建other时必定要隐式调用某个构造函数
-  //! 如果直接调用赋值运算符，ptr3=ptr1,此时在构造other时编译器会把ptr3作为参数，隐式调用拷贝构造函数，然而我们没有拷贝构造函数(声明了移动构造但是没有显示声明拷贝构造，拷贝构造自动被禁用)
-  //! 如果等号右侧是一个右值引用ptr3 = std::move(ptr1)，这时在创建other时就会自动隐式调用移动构造函数
-  // 如果我们同时拥有拷贝(并没有，只有移动，也就是等号右侧只能是右值引用)和移动构造函数，那么赋值运算符间接使用拷贝还是移动就完全可控了
+  // 带模板的构造函数不会被编译器识别为移动构造函数，因此需要显式delete拷贝构造函数和移动构造函数
+  smart_ptr(const smart_ptr &) = delete;
+  smart_ptr(smart_ptr &&) = delete;
+  auto operator=(smart_ptr &&) -> smart_ptr & = delete;
+
+  /*
+   * 为了确保子类指针能够移动给基类指针
+   * smart_ptr<circle> pc{new circle()};
+   * smart_ptr<shape> ps = std::move(pc)
+   * 假设T是shape,U是circle
+   * 在调用other.release()的过程中，新建一个T*类型的指针ptr，
+   * 并将U*类型的other.ptr_赋值给它，如果是U是子类，T是基类，
+   * 这种赋值编译器是允许的，但如果不是，就会在编译阶段报错
+   */
+  template <typename U>
+  explicit smart_ptr(smart_ptr<U> &&other) : ptr_(other.release()) {}
+
   auto operator=(const smart_ptr other) -> smart_ptr & {
-    // 这里的other对象相当于是外界ptr1，因为在构造other时，ptr1已经被移动构造函数拿走了指针的所有权，外界已经无法再使用ptr1了
-    // 调用other对象的swap方法和当前对象的ptr互换（当前对象是新对象，ptr还是nullptr）
     other.swap(*this);
     return *this;
   };
